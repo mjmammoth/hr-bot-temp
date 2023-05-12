@@ -1,0 +1,66 @@
+version: '3'
+
+services:
+
+  hr-bot:
+    build:
+      context: .
+    env_file:
+      - .env
+    ports: [8501:8501/tcp]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hrprealhpa.rule=Host(`hr-pre-alpha.${DOMAIN}`)"
+      - "traefik.http.routers.hrprealhpa.entrypoints=web-secure"
+      - "traefik.http.routers.hrprealhpa.tls.certresolver=certificato"
+      - "traefik.http.routers.hrprealhpa.tls.domains[0].main=*.${DOMAIN}"
+      - "traefik.http.routers.hrprealhpa.service=hrPreAlphaService"
+      - "traefik.http.services.hrPreAlphaService.loadBalancer.server.port=8501"
+      - "traefik.http.routers.hrprealhpa.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=hr-pre-alpha-user:$$2y$$10$$rr/VV0UU.zWDSMQA7dO.Qeb7bUVln/OzyupSm01xahpwyLkbr9laa"
+
+
+  pgvector:
+    image: ankane/pgvector
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - 5433:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+
+  traefik:
+    image: traefik:latest
+    command:
+      # - "--log.level=DEBUG"
+      # - "--api.dashboard=true"
+      # - "--api.insecure=false"
+      # - "--providers.file.directory=/FileProvider/"
+      # - "--providers.file.watch=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=web-secure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web-secure.address=:443"
+      - "--serverstransport.insecureskipverify=true"
+      - "--certificatesresolvers.certificato.acme.dnschallenge=true"
+      - "--certificatesresolvers.certificato.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.certificato.acme.dnschallenge.delaybeforecheck=10"
+      - "--certificatesresolvers.certificato.acme.dnschallenge.resolvers=1.1.1.1:53"
+      - "--certificatesresolvers.certificato.acme.caserver=https://acme-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.certificato.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.certificato.acme.storage=acme.json"
+    env_file:
+      - .env
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./acme.json:/acme.json
+    restart: always
+
+volumes:
+  postgres-data:
